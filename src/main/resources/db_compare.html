@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>SQL Frontend</title>
+    <link rel="shortcut icon" href="data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAjVBMVEX+YgD+bRL+u5D+sYH+nmH+mlv+/fv+vpX+qnb+qHL+dR/+ag7+/v7+07f+rnv+mFj+kUz+jkj+hDf+dyP+cRn++/n+4c/+3cj+1bv+z7D+yKX+xaH+wpz+wJj+toj+pm/+lFH+ikH+Zwj+8+v+6Nr+5dX+2sT+zKz+t4v+tIb+oWb+gC/+eyn+ZQX+7eHWCq6xAAAAqUlEQVQY03XNNRLDQBBE0WUUM5PF4Psfz1W7Sj3Zf8E0+HcUaSoGcsC3m21Y83nBfWtbibON4BjTKrCAovpxRdhlU2eBB26TYoaKrDANXZh8eenk7eJbmE/NOungPY0NaO+OWMadrUwvA2RVwOP1RBC2PwdFcZMz8nGRNEB9KDFHRFSSGgjklYDo47AAJHal1EcMRi+cXgC+8vxQx/fYCwt1CB5VVD3ZwQ/Mgwu8Y6fuswAAAABJRU5ErkJggg=="
+    />
+    <link href="packed.css" rel="stylesheet" type="text/css">
+    <script src="packed.js"></script>
+</head>
+
+<body>
+    <div id="container">
+        <header>
+            <div id="title">
+                <h1>DB Compare</h1>
+                <div id="ingLogo"></div>
+            </div>
+            <div class="row">
+                <label id="lblEmptyTables" for="chkToggleEmptyTables">Show empty tables</label>
+                <input type="checkbox" id="chkToggleEmptyTables" onclick="toggleEmptyTables(this.checked)" />
+            </div>
+            <div class="row">
+                <span class="short">DBs:</span>
+                <div id="chkDbs"></div>
+                <div id="txtErrorDb"></div>
+            </div>
+            <div class="row">
+                <div id="divTableComparison"></div>
+            </div>
+            <hr>
+            <div class="row generatedSql animFadeIn hidden">
+                <span class="short">SQL:</span>
+                <span id="txtSql" class="inputSql" contenteditable role="textbox"></span>
+                <span class="short">WHERE:</span>
+                <span id="txtWhere" class="inputSql" contenteditable role="textbox"></span>
+                <span class="short">ORDER BY:</span>
+                <span id="txtOrderBy" class="inputSql" contenteditable role="textbox"></span>
+                <button class="btn" type="button" onclick="execSql($('#txtSql').innerHTML)">Go!</button>
+                <span class="loading hidden"></span>
+                <span id="maxRows">
+                    <label for="txtMaxRows">Max rows visible:</label>
+                    <input type="number" id="txtMaxRows" value="1000">
+                </span>
+            </div>
+            <hr>
+        </header>
+        <div id="comparisonResult" class="row"> </div>
+        <div id="comparisonButtons" class="row hidden">
+            <button type="button" class="btn success" onclick="showAllRows()">All rows</button>
+            <button type="button" class="btn success" onclick="showOnlyInSource()">Only in Source</button>
+            <button type="button" class="btn success" onclick="showInBothButDifferent()">In both, but different</button>
+            <button type="button" class="btn success" onclick="showOnlyInTarget()">Only in Target</button>
+            <button type="button" class="btn success" onclick="showIdentical()">Identical</button>
+        </div>
+        <div id="sqlResult">
+            <div id="divTableContents"></div>
+            <div id="txtError"></div>
+        </div>
+    </div>
+</body>
+
+</html>

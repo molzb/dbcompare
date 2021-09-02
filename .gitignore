@@ -1,0 +1,22 @@
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### VS Code ###
+.vscode/
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+.mvn/wrapper/MavenWrapperDownloader.java
+mvnw
+mvnw.cmd
+src/main/resources/packed.js
+src/main/resources/packed.css
+.settings/org.eclipse.core.resources.prefs
+.settings/org.eclipse.jdt.apt.core.prefs
+.settings/org.eclipse.jdt.core.prefs
+.settings/org.eclipse.m2e.core.prefs
+.factorypath
+.project
+.classpath
