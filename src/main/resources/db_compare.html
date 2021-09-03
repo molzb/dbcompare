@@ -20,6 +20,7 @@
                 <label id="lblEmptyTables" for="chkToggleEmptyTables">Show empty tables</label>
                 <input type="checkbox" id="chkToggleEmptyTables" onclick="toggleEmptyTables(this.checked)" />
             </div>
+
             <div class="row">
                 <span class="short">DBs:</span>
                 <div id="chkDbs"></div>
@@ -37,12 +38,25 @@
                 <span class="short">ORDER BY:</span>
                 <span id="txtOrderBy" class="inputSql" contenteditable role="textbox"></span>
                 <button class="btn" type="button" onclick="execSql($('#txtSql').innerHTML)">Go!</button>
+                <button class="btn default" onclick="$('.generatedSql').hide(); $('.ownSql').show()">⇊ Toggle! ⇊</button>
                 <span class="loading hidden"></span>
                 <span id="maxRows">
                     <label for="txtMaxRows">Max rows visible:</label>
                     <input type="number" id="txtMaxRows" value="1000">
                 </span>
             </div>
+            <div class="row ownSql animFadeIn hidden">
+                <span class="short">SQL:</span>
+                <span id="txtOwnSql" class="inputSql" contenteditable role="textbox"></span>
+                <button class="btn" onclick="execSql($('#txtOwnSql').innerHTML)">Go!</button>
+                <button class="btn default" onclick="$('.generatedSql').show(); $('.ownSql').hide()">⇈ Toggle! ⇈</button>
+                <span class="loadingOwn hidden"></span>
+                <span id="maxOwnRows">
+                    <label for="txtMaxOwnRows">Max rows visible:</label>
+                    <input type="number" id="txtMaxOwnRows" value="1000">
+                </span>
+            </div>
+
             <hr>
         </header>
         <div id="comparisonResult" class="row"> </div>

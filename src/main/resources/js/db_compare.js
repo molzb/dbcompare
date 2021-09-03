@@ -5,6 +5,7 @@
 var rowsOriginal = {};
 var rows = {};
 var rowFields = [];
+var rowFieldId = '';
 var rowsDifferent = {};
 var rowsIdentical = {};
 var rowsWithSameId = {};
@@ -74,13 +75,15 @@ function compareTables(rows1, rows2, checkedDbs) {
 }
 
 function compareRowsWithSameIds(rows1, rows2) {
-    var fieldWithId = rowFields.filter(f => f.toLowerCase().startsWith('id') || f.toLowerCase().endsWith('id')).toString();
-    if (fieldWithId === undefined) {
+    // TODO Read Resultset Metadata
+    var fieldsWithId = rowFields.filter(f => f.toLowerCase().startsWith('id') || f.toLowerCase().endsWith('id'));
+    if (fieldsWithId.length === 0) {
         return;
     }
+    rowFieldId = fieldsWithId[0].toString();
     for (var i1 = 0; i1 < rows1.length; i1++) {
         for (var i2 = 0; i2 < rows2.length; i2++) {
-            if (rows1[i1][fieldWithId] === rows2[i2][fieldWithId]) {
+            if (rows1[i1][rowFieldId] === rows2[i2][rowFieldId]) {
                 rows1[i1].hasDiff = i2;
                 rows2[i2].hasDiff = i1;
                 break;
@@ -92,7 +95,7 @@ function compareRowsWithSameIds(rows1, rows2) {
 function showResultTable(db, theseRows) {
     var tblForDB = $("#sqlResult #tbl" + db);
     var count = theseRows[db].length;
-    tblForDB.innerHTML = createTable(theseRows[db], db);
+    tblForDB.innerHTML = createTable(theseRows[db], db, false);
     tblForDB.nextElementSibling.innerHTML = `Showing ${count} results.`;
 }
 
@@ -222,7 +225,7 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
 
                 response.json().then(rows => {
                     var h3 = `<h3>${dbName}</h3>`;
-                    var tbl = createTable(rows, dbName); // + "_Overview");
+                    var tbl = createTable(rows, dbName, true); // + "_Overview");
                     var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}</div>`;
 
                     $('#divTableComparison').innerHTML += wrapperForH3AndTbl;
@@ -312,7 +315,7 @@ function hideLastSelected(td) {
 }
 
 function renderCheckboxesForTableColumns(dbName, selectedTable, columnNames) {
-    var allTdsInTableForDbname = Array.from($all('#tbl' + dbName + ' td'));
+    var allTdsInTableForDbname = $all('#tbl' + dbName + ' td');
     var tds = allTdsInTableForDbname.filter(currentTd => currentTd.innerText.includes(selectedTable));
     if (tds.length === 0)
         return;
@@ -321,7 +324,7 @@ function renderCheckboxesForTableColumns(dbName, selectedTable, columnNames) {
     if (columnNames.length === 0) {
         innerHTML += 'No columns in table';
     } else {
-        innerHTML += '<input type="checkbox" class="star" name="star" onchange="selectCheckboxes(this)">* &nbsp;&nbsp;';
+        innerHTML += '<input type="checkbox" class="star" name="star" onchange="selectAsterisk(this)">* &nbsp;&nbsp;';
         columnNames.forEach(c => {
             innerHTML += `<input type="checkbox" class="col" name="${c}" onchange="addColToSelect(this)" value="${c}">${c}`;
         });
@@ -345,10 +348,10 @@ function readColumnNames(dbs, selectedTable, callback) {
     });
 }
 
-function selectCheckboxes(checkboxStar) {
-    var td = checkboxStar.closest('td');
+function selectAsterisk(checkbox) {
+    var td = checkbox.closest('td');
     var checkboxesInTd = Array.from(td.getElementsByTagName('input'));
-    var starIsChecked = checkboxStar.checked;
+    var starIsChecked = checkbox.checked;
     checkboxesInTd.forEach(c => { c.checked = starIsChecked; });
 
     if (starIsChecked) {
@@ -399,7 +402,7 @@ function sortBy(elem, col, reverse) {
     var tableToBeUpdated = elem.closest('table');
     var dbName = tableToBeUpdated.id.substring(3);
     rows[dbName].sort((a, b) => reverse ? a[col].localeCompare(b[col]) : b[col].localeCompare(a[col]));
-    tableToBeUpdated.innerHTML = createTable(rows[dbName], dbName);
+    tableToBeUpdated.innerHTML = createTable(rows[dbName], dbName, false);
 }
 
 /** Toggles Filter visibility (textfield) in table header */
@@ -414,11 +417,11 @@ function filterChanged(elem, col) {
     var tableToBeUpdated = elem.closest('table');
     var dbName = tableToBeUpdated.id.substring(3);
     var rows = rowsOriginal[dbName].filter(row => row[col].includes(elem.value));
-    tableToBeUpdated.innerHTML = createTable(rows, dbName);
+    tableToBeUpdated.innerHTML = createTable(rows, dbName, false);
     $('.resultCount').innerHTML = getRowCount(performance.now(), rows.length);
 }
 
-function execSql(sql) {
+function execSql(sql, isOwnSql) {
     if (getCheckedDbs().length === 0) {
         alert('Please choose a Database');
         return;
@@ -428,16 +431,26 @@ function execSql(sql) {
         return;
     }
 
-    var where = $('#txtWhere').innerHTML,
-        orderBy = $('#txtOrderBy').innerHTML,
-        txtMaxRows = $('#txtMaxRows').value;
-    sql += where !== '' ? ' WHERE ' + where : '';
-    sql += where.toLowerCase().includes('rownum') ? '' : (where === '' ? ` WHERE rownum <= ${txtMaxRows}` : ` AND rownum <= ${txtMaxRows}`);
+    var where = isOwnSql ? '' : $('#txtWhere').innerHTML,
+        orderBy = isOwnSql ? '' : $('#txtOrderBy').innerHTML,
+        txtMaxRows = isOwnSql ? $('#txtMaxOwnRows').value : $('#txtMaxRows').value;
+    if (isOwnSql) {
+        if (sql.includes('WHERE ')) {
+            sql = sql.replace('WHERE ', `WHERE rownum <= ${txtMaxRows} AND `);
+        } else if (sql.includes('ORDER BY')) {
+            sql = sql.replace('ORDER BY', `WHERE rownum <= ${txtMaxRows} ORDER BY`);
+        } else {
+            sql += `WHERE rownum <= ${txtMaxRows}`;
+        }
+    } else {
+        sql += where !== '' ? ' WHERE ' + where : '';
+        sql += where.toLowerCase().includes('rownum') ? '' : (where === '' ? ` WHERE rownum <= ${txtMaxRows}` : ` AND rownum <= ${txtMaxRows}`);
+    }
 
     sql += orderBy !== '' ? ' ORDER BY ' + orderBy : '';
 
     var t1ms = parseInt(window.performance.now());
-    $('.loading').show();
+    isOwnSql ? $('.loadingOwn').show() : $('.loading').show();
     var dbs = getCheckedDbs();
     var lastDb = dbs[dbs.length - 1];
 
@@ -452,24 +465,20 @@ function execSql(sql) {
             } else { // Request is ok
                 response.json().then(rowsFromDb => {
                     $('.loading').hide();
+                    $('.loadingOwn').hide();
                     $('#txtError').empty();
 
                     rows[dbName] = rowsFromDb;
                     rowsOriginal[dbName] = jsonClone(rowsFromDb);
                     var h3 = `<h3>${dbName}</h3>`;
-                    var tbl = createTable(rows[dbName], dbName);
+                    var tbl = createTable(rows[dbName], dbName, false);
                     var rowCount = getRowCount(t1ms, rows[dbName].length);
                     var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}${rowCount}</div>`;
                     $('#divTableContents').innerHTML += wrapperForH3AndTbl;
 
-                    if (dbs.length > 1 && dbName === dbs[dbs.length - 1]) { // last table is rendered
-                        setTimeout(() => alignTablesHorizontally('#divTableContents .tblWrapper', dbs.length), 100);
-                    }
-
                     if (rows[dbName].length > 0) {
                         // Get Database columns (e.g. col1, col2) as array
                         rowFields = Object.keys(rowsOriginal[dbName][0]);
-                        // for (var field in rowsOriginal[dbName][0]) rowFields.push(field);
                     }
 
                     if (dbName === lastDb) {
@@ -479,7 +488,9 @@ function execSql(sql) {
                         else
                             $('#comparisonButtons').hide();
 
+                        alignTablesHorizontally('#divTableContents .tblWrapper', dbs.length);
                         window.scrollTo(0, $('.generatedSql').offsetTop);
+                        addMouseEnterEventsInAllRows($(`#divTableContents #tbl${dbs[0]}`));
                     }
                 });
             }
@@ -487,17 +498,41 @@ function execSql(sql) {
     });
 }
 
+function addMouseEnterEventsInAllRows(tbl) {
+    var trs = Array.from(tbl.querySelectorAll('tbody tr'));
+    var idxOfIdColumn = rowFields.indexOf(rowFieldId);
+
+    if (idxOfIdColumn > -1) {
+        trs.forEach(tr => {
+            tr.addEventListener('mouseenter', (e) => {
+                var t = e.target;
+                var rowId = t.children[idxOfIdColumn].innerText;
+
+                var dbs = getCheckedDbs();
+                var tbl1Trs = $all(`#divTableContents #tbl${dbs[1]} tbody tr`);
+                tbl1Trs.forEach(trX => trX.classList.remove('hover'));
+                tbl1Trs.forEach(trX => {
+                    if (trX.children[idxOfIdColumn].innerText === rowId) {
+                        trX.classList.add('hover');
+                    }
+                });
+            });
+        });
+    }
+}
+
 function showError(error) {
     if ($('.resultCount'))
         $('.resultCount').empty();
     $('#txtError').innerHTML = error;
     $('.loading').hide();
+    $('.loadingOwn').hide();
 }
 
-function createTable(rows, dbName) {
+function createTable(rows, dbName, isOverview) {
     var tbl = `<table id="tbl${dbName}" class="tblSql">\n  <thead>%h</thead>\n  <tbody>%b</tbody>\n</table>`;
     var th = '<th>%s <input type="text" class="filter vHidden" onchange="filterChanged(this, \'%c\')"> </th>';
-    var td = '<td data-tbl="%t">%s</td>';
+    var td = isOverview ? '<td data-tbl="%t">%s</td>' : '<td>%s</td>';
 
     // create table header
     var headers = rows && rows.length > 0 ? Object.keys(rows[0]) : ['empty'];
@@ -518,7 +553,7 @@ function createTable(rows, dbName) {
             if (h !== 'hasEqual' && h !== 'hasDiff') { // TODO -> ugly 
                 if (!r[h]) // undefined, because db column is empty
                     r[h] = '';
-                tr += td.replace('%s', r[h]).replace('%t', r[h].split(",")[0]);
+                tr += isOverview ? td.replace('%s', r[h]).replace('%t', r[h].split(",")[0]) : td.replace('%s', r[h]);
             }
         });
         tbody += `<tr>${tr}</tr>`;

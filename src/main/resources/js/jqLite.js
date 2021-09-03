@@ -3,7 +3,7 @@ function $(id) {
 }
 
 function $all(id) {
-    return document.querySelectorAll(id);
+    return Array.from(document.querySelectorAll(id));
 }
 
 HTMLElement.prototype.show = function() {
