@@ -12,4 +12,5 @@ HTMLElement.prototype.hide = function() { this.style.display = 'none'; }
 HTMLElement.prototype.empty = function() { this.innerHTML = ''; }
 HTMLElement.prototype.addClass = function(cls) { this.classList.add(cls); };
 HTMLElement.prototype.removeClass = function(cls) { this.classList.remove(cls); };
+HTMLElement.prototype.find = function(sel) { return this.querySelector(sel); };
 //

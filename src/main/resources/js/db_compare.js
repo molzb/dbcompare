@@ -299,7 +299,7 @@ function showColumnsOfTable(e) {
     if (td.className.includes('gray'))
         return;
     if (td.dataset.columnsloaded === 'true') {
-        td.children[0].removeClass('hidden'); // wrapping div for checkboxes
+        td.find('.tableSelected').removeClass('hidden'); // wrapping div for checkboxes
         hideLastSelected(td);
         return;
     }
@@ -312,13 +312,26 @@ function showColumnsOfTable(e) {
         var columnNames = dbNameAndColumns[1];
         renderCheckboxesForTableColumns(dbName, selectedTable, columnNames);
         td.dataset.columnsloaded = 'true';
+
+        getRowCountOfTable(dbName, selectedTable, (cnt) => td.find('.cnt').innerHTML += ` [${cnt} rows]`);
     });
+}
+
+function getRowCountOfTable(dbName, tbl, callback) {
+    var sql = `SELECT COUNT(*) AS cnt FROM ${tbl}`;
+    fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(
+        response => {
+            if (response.status === 400) {
+                showError(reponse.statusText);
+            }
+            response.json().then(rows => callback(rows[0].CNT));
+        });
 }
 
 function hideLastSelected(td) {
     if (lastClickedTdInOverview != null && lastClickedTdInOverview != td) {
         if (lastClickedTdInOverview.children.length > 0)
-            lastClickedTdInOverview.children[0].addClass('hidden');
+            lastClickedTdInOverview.find('.tableSelected').addClass('hidden');
     }
     lastClickedTdInOverview = td;
 }
@@ -546,7 +559,7 @@ function showError(error) {
 function createTable(rows, dbName, isOverview) {
     var tbl = `<table id="tbl${dbName}" class="tblSql">\n  <thead>%h</thead>\n  <tbody>%b</tbody>\n</table>`;
     var th = '<th>%s <input type="text" class="filter vHidden" onchange="filterChanged(this, \'%c\')"> </th>';
-    var td = isOverview ? '<td data-tbl="%t">%s</td>' : '<td>%s</td>';
+    var td = isOverview ? '<td data-tbl="%t">%s<span class="cnt"><span></td>' : '<td>%s</td>';
 
     // create table header
     var headers = rows && rows.length > 0 ? Object.keys(rows[0]) : ['empty'];
