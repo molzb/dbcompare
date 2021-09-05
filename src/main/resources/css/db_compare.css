@@ -83,8 +83,21 @@ span.short {
     overflow-x: auto;
 }
 
-#chkDbs {
+#chkDbsOnTheLeft,
+#chkDbsOnTheRight {
     display: inline;
+}
+
+#chkDbsOnTheLeft {
+    float: left;
+}
+
+#chkDbsOnTheRight {
+    float: right;
+}
+
+.compareWithMsg {
+    color: green;
 }
 
 #chkToggleEmptyTables,
@@ -134,6 +147,7 @@ span.short {
 #txtOwnSql[contenteditable]:empty::before {
     content: 'SELECT this,that FROM table';
     display: inline-block;
+    color: lightgray;
 }
 
 #txtOwnSql[contenteditable]:empty:focus::before {

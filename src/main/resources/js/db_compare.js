@@ -2,22 +2,24 @@
 /* jshint esversion: 6 */
 /* globals $, $all: false */
 'use strict';
-var rowsOriginal = {};
-var rows = {};
-var rowFields = [];
-var rowFieldId = '';
-var rowsDifferent = {};
-var rowsIdentical = {};
-var rowsWithSameId = {};
-var rowsAreDifferent = false;
-var rowsOnlyIn = {};
+var rows = {
+    areDifferent: false,
+    fields: [],
+    fieldId: '',
+
+    all: {},
+    different: {},
+    identical: {},
+    withSameId: {},
+    onlyIn: {}
+};
 
 function jsonIsEqual(json1, json2) {
     if (json1 === json2)
         return true;
     var isEqual = true;
-    for (var i = 0; i < rowFields.length; i++) {
-        if (json1[rowFields[i]] !== json2[rowFields[i]]) {
+    for (var i = 0; i < rows.fields.length; i++) {
+        if (json1[rows.fields[i]] !== json2[rows.fields[i]]) {
             isEqual = false;
             break;
         }
@@ -38,8 +40,8 @@ function jsonClone(json) {
  * @param {*} checkedDbs the selected databases
  */
 function compareTables(rows1, rows2, checkedDbs) {
-    rowsAreDifferent = JSON.stringify(rows1) !== JSON.stringify(rows2);
-    if (rowsAreDifferent) {
+    rows.areDifferent = JSON.stringify(rows1) !== JSON.stringify(rows2);
+    if (rows.areDifferent) {
         for (var i1 = 0; i1 < rows1.length; i1++) {
             for (var i2 = 0; i2 < rows2.length; i2++) {
                 if (!rows1[i1].hasEqual && !rows2[i2].hasEqual && jsonIsEqual(rows1[i1], rows2[i2])) {
@@ -57,33 +59,33 @@ function compareTables(rows1, rows2, checkedDbs) {
     }
     var db1 = checkedDbs[0],
         db2 = checkedDbs[1];
-    rowsDifferent[db1] = jsonClone(rowsOriginal[db1].filter(r => r.hasEqual == undefined));
-    rowsDifferent[db2] = jsonClone(rowsOriginal[db2].filter(r => r.hasEqual == undefined));
-    rowsIdentical[db1] = jsonClone(rowsOriginal[db1].filter(r => r.hasEqual));
-    rowsIdentical[db2] = jsonClone(rowsOriginal[db2].filter(r => r.hasEqual));
-    compareRowsWithSameIds(rowsDifferent[db1], rowsDifferent[db2]);
+    rows.different[db1] = jsonClone(rows.all[db1].filter(r => r.hasEqual == undefined));
+    rows.different[db2] = jsonClone(rows.all[db2].filter(r => r.hasEqual == undefined));
+    rows.identical[db1] = jsonClone(rows.all[db1].filter(r => r.hasEqual));
+    rows.identical[db2] = jsonClone(rows.all[db2].filter(r => r.hasEqual));
+    compareRowsWithSameIds(rows.different[db1], rows.different[db2]);
 
-    rowsWithSameId[db1] = jsonClone(rowsDifferent[db1].filter(r => r.hasDiff));
-    rowsWithSameId[db2] = jsonClone(rowsDifferent[db2].filter(r => r.hasDiff));
-    rowsOnlyIn[db1] = jsonClone(rowsDifferent[db1].filter(r => r.hasDiff == undefined));
-    rowsOnlyIn[db2] = jsonClone(rowsDifferent[db2].filter(r => r.hasDiff == undefined));
+    rows.withSameId[db1] = jsonClone(rows.different[db1].filter(r => r.hasDiff));
+    rows.withSameId[db2] = jsonClone(rows.different[db2].filter(r => r.hasDiff));
+    rows.onlyIn[db1] = jsonClone(rows.different[db1].filter(r => r.hasDiff == undefined));
+    rows.onlyIn[db2] = jsonClone(rows.different[db2].filter(r => r.hasDiff == undefined));
 
-    var diff1Len = rowsDifferent[db1].length,
-        diff2Len = rowsDifferent[db2].length;
-    var result = `Result: Equal rows: ${rowsIdentical[db1].length}, different rows: ${diff1Len}/${diff2Len}`;
-    $('#comparisonResult').innerHTML = rowsAreDifferent ? result : 'All rows are identical';
+    var diff1Len = rows.different[db1].length,
+        diff2Len = rows.different[db2].length;
+    var result = `Result: Equal rows: ${rows.identical[db1].length}, different rows: ${diff1Len}/${diff2Len}`;
+    $('#comparisonResult').innerHTML = rows.areDifferent ? result : 'All rows are identical';
 }
 
 function compareRowsWithSameIds(rows1, rows2) {
     // TODO Read Resultset Metadata
-    var fieldsWithId = rowFields.filter(f => f.toLowerCase().startsWith('id') || f.toLowerCase().endsWith('id'));
+    var fieldsWithId = rows.fields.filter(f => f.toLowerCase().startsWith('id') || f.toLowerCase().endsWith('id'));
     if (fieldsWithId.length === 0) {
         return;
     }
-    rowFieldId = fieldsWithId[0].toString();
+    rows.fieldId = fieldsWithId[0].toString();
     for (var i1 = 0; i1 < rows1.length; i1++) {
         for (var i2 = 0; i2 < rows2.length; i2++) {
-            if (rows1[i1][rowFieldId] === rows2[i2][rowFieldId]) {
+            if (rows1[i1][rows.fieldId] === rows2[i2][rows.fieldId]) {
                 rows1[i1].hasDiff = i2;
                 rows2[i2].hasDiff = i1;
                 break;
@@ -100,25 +102,25 @@ function showResultTable(db, theseRows) {
 }
 
 function showInBothButDifferent() {
-    getCheckedDbs().forEach(db => showResultTable(db, rowsDifferent));
+    getCheckedDbs().forEach(db => showResultTable(db, rows.different));
 }
 
 function showAllRows() {
-    getCheckedDbs().forEach(db => showResultTable(db, rowsOriginal));
+    getCheckedDbs().forEach(db => showResultTable(db, rows.all));
 }
 
 function showOnlyInSource() {
     var db = getCheckedDbs()[0];
-    showResultTable(db, rowsOnlyIn);
+    showResultTable(db, rows.onlyIn);
 }
 
 function showOnlyInTarget() {
     var db = getCheckedDbs()[1];
-    showResultTable(db, rowsOnlyIn);
+    showResultTable(db, rows.onlyIn);
 }
 
 function showIdentical() {
-    getCheckedDbs().forEach(db => showResultTable(db, rowsIdentical));
+    getCheckedDbs().forEach(db => showResultTable(db, rows.identical));
 }
 
 function keyupSql(e) {
@@ -139,19 +141,25 @@ function getDbNames(callback) {
 }
 
 function renderDbCheckboxes(dbNames) {
-    var chks = '';
+    var chksLeft = '',
+        chksRight = '';
     dbNames.forEach(j => {
         var lbl = `<span class="tooltip">${j}  | </span>`;
-        chks += `<input type="checkbox" name="${j}" onchange="readTablesForOverview(getCheckedDbs())" value="${j}">${lbl}`;
+        chksLeft += `<input type="radio" name="dbsLeft" onchange="readTablesForOverview(getCheckedDbs())" value="${j}">${lbl}`;
+        chksRight += `<input type="radio" name="dbsRight" onchange="readTablesForOverview(getCheckedDbs())" value="${j}">${lbl}`;
     });
-    $('#chkDbs').innerHTML = chks;
+    $('#chkDbsOnTheLeft').innerHTML += chksLeft;
+    $('#chkDbsOnTheRight').innerHTML += chksRight;
 
     // retrieve checked DBs from localStorage
     var checkedDbs = [];
     if (localStorage.getItem("dbc_checkedDbs") != null) {
         checkedDbs = localStorage.getItem("dbc_checkedDbs").split(",");
-        $all('#chkDbs input').forEach(c => {
-            if (checkedDbs.includes(c.value)) c.checked = true;
+        $all('#chkDbsOnTheLeft input').forEach(c => {
+            if (checkedDbs[0].includes(c.value)) c.checked = true;
+        });
+        $all('#chkDbsOnTheRight input').forEach(c => {
+            if (checkedDbs[1] === c.value) c.checked = true;
         });
     }
     return new Promise((resolve, reject) => resolve(checkedDbs));
@@ -159,11 +167,8 @@ function renderDbCheckboxes(dbNames) {
 
 function getCheckedDbs() {
     var checkedDbs = [];
-    $all("#chkDbs input").forEach(chk => {
-        if (chk.checked) {
-            checkedDbs.push(chk.value);
-        }
-    });
+    $all("#chkDbsOnTheLeft input").forEach(c => { if (c.checked) checkedDbs.push(c.value); });
+    $all("#chkDbsOnTheRight input").forEach(c => { if (c.checked) checkedDbs.push(c.value); });
     return checkedDbs;
 }
 
@@ -178,15 +183,19 @@ function pingDbs() {
         response.json().then(js => {
             var dbAvailable = js;
             var i = 0;
-            $all('#chkDbs input').forEach(c => {
-                var available = dbAvailable[i++];
-                if (!available) {
-                    c.nextElementSibling.innerHTML += '<span class="tooltiptext">DB not available</span>';
-                    c.disabled = true;
-                }
-            });
+            $all('#chkDbsOnTheLeft input').forEach(c => addTooltip(dbAvailable, c, i++));
+            var i = 0;
+            $all('#chkDbsOnTheRight input').forEach(c => addTooltip(dbAvailable, c, i++));
         });
     });
+}
+
+function addTooltip(dbAvailable, elem, i) {
+    var available = dbAvailable[i];
+    if (!available) {
+        elem.nextElementSibling.innerHTML += '<span class="tooltiptext">DB not available</span>';
+        elem.disabled = true;
+    }
 }
 
 function readTablesForOverview(checkedDbs) {
@@ -209,8 +218,7 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
     $('#divTableComparison').empty();
     $('#txtErrorDb').empty();
 
-    var sql = "SELECT (table_name || ', ' || TO_CHAR(num_rows,'9,999,999,999') || ' rows') tables ";
-    sql += "FROM sys.all_tables WHERE owner = '%o' %s ORDER BY table_name";
+    var sql = "SELECT table_name AS tables FROM sys.all_tables WHERE owner = '%o' %s ORDER BY table_name";
     sql = sql.replace('%s', showEmptyTables ? "" : "AND num_rows > 0");
 
     // do a SELECT for the tables in the database
@@ -254,7 +262,7 @@ function alignTablesHorizontally(div, numberOfTables) {
 function grayOutTablesWithZeroRows() {
     $all('#divTableComparison .tblSql td').forEach(cell => {
         if (cell.innerHTML.includes(" 0 rows"))
-            cell.classList.add('gray');
+            cell.addClass('gray');
     });
 }
 
@@ -266,8 +274,8 @@ function addMouseEventsForTds() {
     var allTds = getAllTableCellsInOverview();
     console.log("add events: " + allTds.length);
     allTds.forEach(td => {
-        td.addEventListener('mouseenter', tableCellMouseEnter);
-        td.addEventListener('mouseleave', tableCellMouseLeave);
+        td.addEventListener('mouseenter', tdMouseEnterInOverview);
+        td.addEventListener('mouseleave', tdMouseLeaveInOverview);
         td.addEventListener('click', showColumnsOfTable);
     });
 }
@@ -276,8 +284,8 @@ function removeMouseEventsForTds() {
     var allTds = getAllTableCellsInOverview();
     console.log("remove events: " + allTds.length);
     allTds.forEach(td => {
-        td.removeEventListener('mouseenter', tableCellMouseEnter);
-        td.removeEventListener('mouseleave', tableCellMouseLeave);
+        td.removeEventListener('mouseenter', tdMouseEnterInOverview);
+        td.removeEventListener('mouseleave', tdMouseLeaveInOverview);
         td.removeEventListener('click', showColumnsOfTable);
     });
 }
@@ -291,7 +299,7 @@ function showColumnsOfTable(e) {
     if (td.className.includes('gray'))
         return;
     if (td.dataset.columnsloaded === 'true') {
-        td.children[0].classList.remove('hidden'); // wrapping div for checkboxes
+        td.children[0].removeClass('hidden'); // wrapping div for checkboxes
         hideLastSelected(td);
         return;
     }
@@ -309,7 +317,8 @@ function showColumnsOfTable(e) {
 
 function hideLastSelected(td) {
     if (lastClickedTdInOverview != null && lastClickedTdInOverview != td) {
-        lastClickedTdInOverview.children[0].classList.add('hidden');
+        if (lastClickedTdInOverview.children.length > 0)
+            lastClickedTdInOverview.children[0].addClass('hidden');
     }
     lastClickedTdInOverview = td;
 }
@@ -382,27 +391,27 @@ function addColToSelect(checkbox) {
     }
 }
 
-function tableCellMouseEnter(e) {
+function tdMouseEnterInOverview(e) {
     var selectedTable = e.target.dataset.tbl;
     var allTds = getAllTableCellsInOverview();
     allTds.forEach(c => {
         var tblInCell = c.innerHTML.split(",")[0];
         if (tblInCell === selectedTable) {
-            c.classList.add('hover');
+            c.addClass('hover');
         }
     });
 }
 
-function tableCellMouseLeave() {
+function tdMouseLeaveInOverview() {
     var allTds = getAllTableCellsInOverview();
-    allTds.forEach(c => c.classList.remove('hover'));
+    allTds.forEach(c => c.removeClass('hover'));
 }
 
 function sortBy(elem, col, reverse) {
     var tableToBeUpdated = elem.closest('table');
     var dbName = tableToBeUpdated.id.substring(3);
-    rows[dbName].sort((a, b) => reverse ? a[col].localeCompare(b[col]) : b[col].localeCompare(a[col]));
-    tableToBeUpdated.innerHTML = createTable(rows[dbName], dbName, false);
+    rows.all[dbName].sort((a, b) => reverse ? a[col].localeCompare(b[col]) : b[col].localeCompare(a[col]));
+    tableToBeUpdated.innerHTML = createTable(rows.all[dbName], dbName, false);
 }
 
 /** Toggles Filter visibility (textfield) in table header */
@@ -416,7 +425,7 @@ function toggleFilter(th) {
 function filterChanged(elem, col) {
     var tableToBeUpdated = elem.closest('table');
     var dbName = tableToBeUpdated.id.substring(3);
-    var rows = rowsOriginal[dbName].filter(row => row[col].includes(elem.value));
+    var rows = rows.all[dbName].filter(row => row[col].includes(elem.value));
     tableToBeUpdated.innerHTML = createTable(rows, dbName, false);
     $('.resultCount').innerHTML = getRowCount(performance.now(), rows.length);
 }
@@ -455,6 +464,7 @@ function execSql(sql, isOwnSql) {
     var lastDb = dbs[dbs.length - 1];
 
     $('#divTableContents').empty();
+    var divTableContentInnerHTML = '';
     dbs.forEach(dbName => {
         fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(response => {
             if (response.status === 400) { // Bad Request
@@ -468,22 +478,23 @@ function execSql(sql, isOwnSql) {
                     $('.loadingOwn').hide();
                     $('#txtError').empty();
 
-                    rows[dbName] = rowsFromDb;
-                    rowsOriginal[dbName] = jsonClone(rowsFromDb);
+                    rows.all[dbName] = rowsFromDb;
                     var h3 = `<h3>${dbName}</h3>`;
-                    var tbl = createTable(rows[dbName], dbName, false);
-                    var rowCount = getRowCount(t1ms, rows[dbName].length);
+                    var tbl = createTable(rows.all[dbName], dbName, false);
+                    var rowCount = getRowCount(t1ms, rows.all[dbName].length);
                     var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}${rowCount}</div>`;
-                    $('#divTableContents').innerHTML += wrapperForH3AndTbl;
+                    divTableContentInnerHTML += wrapperForH3AndTbl;
 
-                    if (rows[dbName].length > 0) {
+                    if (rows.all[dbName].length > 0) {
                         // Get Database columns (e.g. col1, col2) as array
-                        rowFields = Object.keys(rowsOriginal[dbName][0]);
+                        rows.fields = Object.keys(rows.all[dbName][0]);
                     }
 
                     if (dbName === lastDb) {
-                        compareTables(rowsOriginal[dbs[0]], rowsOriginal[dbs[1]], dbs);
-                        if (rowsAreDifferent)
+                        $('#divTableContents').innerHTML = divTableContentInnerHTML;
+
+                        compareTables(rows.all[dbs[0]], rows.all[dbs[1]], dbs);
+                        if (rows.areDifferent)
                             $('#comparisonButtons').show();
                         else
                             $('#comparisonButtons').hide();
@@ -500,7 +511,7 @@ function execSql(sql, isOwnSql) {
 
 function addMouseEnterEventsInAllRows(tbl) {
     var trs = Array.from(tbl.querySelectorAll('tbody tr'));
-    var idxOfIdColumn = rowFields.indexOf(rowFieldId);
+    var idxOfIdColumn = rows.fields.indexOf(rows.fieldId);
 
     if (idxOfIdColumn > -1) {
         trs.forEach(tr => {
@@ -510,18 +521,21 @@ function addMouseEnterEventsInAllRows(tbl) {
 
                 var dbs = getCheckedDbs();
                 var tbl1Trs = $all(`#divTableContents #tbl${dbs[1]} tbody tr`);
-                tbl1Trs.forEach(trX => trX.classList.remove('hover'));
-                tbl1Trs.forEach(trX => {
-                    if (trX.children[idxOfIdColumn].innerText === rowId) {
-                        trX.classList.add('hover');
+                tbl1Trs.forEach(trX => trX.removeClass('hover'));
+                for (var i = 0; i < tbl1Trs.length; i++) {
+                    var tdWithId = tbl1Trs[i].children[idxOfIdColumn];
+                    if (tdWithId.innerText === rowId) {
+                        tbl1Trs[i].addClass('hover');
+                        break;
                     }
-                });
+                }
             });
         });
     }
 }
 
 function showError(error) {
+    $('#comparisonResult').empty();
     if ($('.resultCount'))
         $('.resultCount').empty();
     $('#txtError').innerHTML = error;

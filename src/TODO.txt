@@ -1,10 +1,8 @@
-1) rows { different: {}, identical: {}, ... }
-2) comparison tables:   hover over cell
-3)                      highlight cells with diffs
+2) comparison tables:   highlight cells with diffs
+3) Click auf Table zeigt #rows
 4) Reduce to 2 databases, change header UI
 5) Paging
-6) Eigenes SQL
 7) Comparison, wenn Tabelle in nur einem Schema vorhanden
 8) Overview: Klick auf Label für Spalte -> JS-Fehler
 9) Bootstrap 
-10) UI: 2 breite Tabellen in DIV mit Scroll
+10) // UI: 2 breite Tabellen in DIV mit Scroll

@@ -20,10 +20,15 @@
                 <label id="lblEmptyTables" for="chkToggleEmptyTables">Show empty tables</label>
                 <input type="checkbox" id="chkToggleEmptyTables" onclick="toggleEmptyTables(this.checked)" />
             </div>
+            <br/>
 
             <div class="row">
-                <span class="short">DBs:</span>
-                <div id="chkDbs"></div>
+                <div id="chkDbsOnTheLeft">
+                    <div class="compareWithMsg">Compare this database with ...</div>
+                </div>
+                <div id="chkDbsOnTheRight">
+                    <div class="compareWithMsg">... this database</div>
+                </div>
                 <div id="txtErrorDb"></div>
             </div>
             <div class="row">
