@@ -79,7 +79,7 @@ span.short {
 #divTableComparison .tblWrapper,
 #divTableContents .tblWrapper {
     display: inline-grid;
-    margin-right: 10px;
+    margin: 0 10px 10px 0;
     overflow-x: auto;
 }
 
@@ -138,6 +138,12 @@ span.short {
     border-radius: 4px;
     margin-right: 10px;
     border: 1px solid lightgray;
+}
+
+.ownSql,
+.generatedSql {
+    border-top: 1px solid lightgray;
+    border-bottom: 1px solid lightgray;
 }
 
 #txtOwnSql[contenteditable] {
@@ -229,6 +235,7 @@ span.short {
 #txtErrorDb {
     color: red;
     font-weight: bold;
+    text-align: center;
 }
 
 .vHidden {

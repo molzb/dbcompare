@@ -218,7 +218,7 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
     $('#divTableComparison').empty();
     $('#txtErrorDb').empty();
 
-    var sql = "SELECT table_name AS tables FROM sys.all_tables WHERE owner = '%o' %s ORDER BY table_name";
+    var sql = "SELECT table_name AS tables, num_rows FROM sys.all_tables WHERE owner = '%o' %s ORDER BY table_name";
     sql = sql.replace('%s', showEmptyTables ? "" : "AND num_rows > 0");
 
     // do a SELECT for the tables in the database
@@ -246,9 +246,7 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
                     }
                 });
             }
-        ).catch(error => {
-            $('#txtErrorDb').innerHTML += error;
-        });
+        ).catch(error => $('#txtErrorDb').innerHTML += error);
     });
 }
 
@@ -261,7 +259,7 @@ function alignTablesHorizontally(div, numberOfTables) {
 
 function grayOutTablesWithZeroRows() {
     $all('#divTableComparison .tblSql td').forEach(cell => {
-        if (cell.innerHTML.includes(" 0 rows"))
+        if (cell.dataset.cnt === "0")
             cell.addClass('gray');
     });
 }
@@ -312,8 +310,8 @@ function showColumnsOfTable(e) {
         var columnNames = dbNameAndColumns[1];
         renderCheckboxesForTableColumns(dbName, selectedTable, columnNames);
         td.dataset.columnsloaded = 'true';
-
-        getRowCountOfTable(dbName, selectedTable, (cnt) => td.find('.cnt').innerHTML += ` [${cnt} rows]`);
+        // TODO
+        // getRowCountOfTable(dbName, selectedTable, (cnt) => td.find('.cnt').innerHTML += ` [${cnt} rows]`);
     });
 }
 
@@ -408,7 +406,7 @@ function tdMouseEnterInOverview(e) {
     var selectedTable = e.target.dataset.tbl;
     var allTds = getAllTableCellsInOverview();
     allTds.forEach(c => {
-        var tblInCell = c.innerHTML.split(",")[0];
+        var tblInCell = c.innerHTML;
         if (tblInCell === selectedTable) {
             c.addClass('hover');
         }
@@ -559,7 +557,7 @@ function showError(error) {
 function createTable(rows, dbName, isOverview) {
     var tbl = `<table id="tbl${dbName}" class="tblSql">\n  <thead>%h</thead>\n  <tbody>%b</tbody>\n</table>`;
     var th = '<th>%s <input type="text" class="filter vHidden" onchange="filterChanged(this, \'%c\')"> </th>';
-    var td = isOverview ? '<td data-tbl="%t">%s<span class="cnt"><span></td>' : '<td>%s</td>';
+    var td = isOverview ? '<td data-tbl="%t" data-cnt="%c">%s</td>' : '<td>%s</td>';
 
     // create table header
     var headers = rows && rows.length > 0 ? Object.keys(rows[0]) : ['empty'];
@@ -568,7 +566,7 @@ function createTable(rows, dbName, isOverview) {
     var thead = '',
         tbody = '';
     headers.forEach(h => {
-        if (h !== 'hasEqual' && h !== 'hasDiff') // TODO -> ugly 
+        if (h !== 'hasEqual' && h !== 'hasDiff' && h !== 'NUM_ROWS') // TODO -> ugly 
             tr += th.replace('%s', h + addSortingInTableHeader(h, i++)).replace('%c', h);
     });
     thead = `<tr>${tr}</tr>`;
@@ -576,13 +574,17 @@ function createTable(rows, dbName, isOverview) {
     // create table body
     rows.forEach(r => {
         tr = '';
-        headers.forEach(h => {
-            if (h !== 'hasEqual' && h !== 'hasDiff') { // TODO -> ugly 
-                if (!r[h]) // undefined, because db column is empty
-                    r[h] = '';
-                tr += isOverview ? td.replace('%s', r[h]).replace('%t', r[h].split(",")[0]) : td.replace('%s', r[h]);
-            }
-        });
+        if (isOverview) {
+            tr += td.replace('%s', r['TABLES']).replace('%t', r['TABLES']).replace("%c", r['NUM_ROWS']);
+        } else {
+            headers.forEach(h => {
+                if (h !== 'hasEqual' && h !== 'hasDiff') { // TODO -> ugly 
+                    if (!r[h]) // undefined, because db column is empty
+                        r[h] = '';
+                    tr += td.replace('%s', r[h]);
+                }
+            });
+        }
         tbody += `<tr>${tr}</tr>`;
     });
     return tbl.replace('%h', thead).replace('%b', tbody);
