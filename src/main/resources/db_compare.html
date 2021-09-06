@@ -20,16 +20,19 @@
                 <label id="lblEmptyTables" for="chkToggleEmptyTables">Show empty tables</label>
                 <input type="checkbox" id="chkToggleEmptyTables" onclick="toggleEmptyTables(this.checked)" />
             </div>
-            <br/>
+            <br />
 
             <div class="row">
                 <div id="txtErrorDb"></div>
                 <div id="chkDbsOnTheLeft">
-                    <div class="compareWithMsg">Compare this database with ...</div>
+                    <div class="msg">Compare this database with ...</div>
                 </div>
                 <div id="chkDbsOnTheRight">
-                    <div class="compareWithMsg">... this database</div>
+                    <div class="msg">... this database</div>
                 </div>
+            </div>
+            <div class="row">
+                <div class="msgCentered">Click on a table you want to see and compare</div>
             </div>
             <div class="row">
                 <div id="divTableComparison"></div>
@@ -43,7 +46,8 @@
                 <span class="short">ORDER BY:</span>
                 <span id="txtOrderBy" class="inputSql" contenteditable role="textbox"></span>
                 <button class="btn" type="button" onclick="execSql($('#txtSql').innerHTML)">Go!</button>
-                <button class="btn default" onclick="$('.generatedSql').hide(); $('.ownSql').show()">⇊ Toggle! ⇊</button>
+                <button class="btn default" onclick="$('.generatedSql').hide(); $('.ownSql').show()">⇊ Toggle!
+                    ⇊</button>
                 <span class="loading hidden"></span>
                 <span id="maxRows">
                     <label for="txtMaxRows">Max rows visible:</label>
@@ -54,7 +58,8 @@
                 <span class="short">SQL:</span>
                 <span id="txtOwnSql" class="inputSql" contenteditable role="textbox"></span>
                 <button class="btn" onclick="execSql($('#txtOwnSql').innerHTML)">Go!</button>
-                <button class="btn default" onclick="$('.generatedSql').show(); $('.ownSql').hide()">⇈ Toggle! ⇈</button>
+                <button class="btn default" onclick="$('.generatedSql').show(); $('.ownSql').hide()">⇈ Toggle!
+                    ⇈</button>
                 <span class="loadingOwn hidden"></span>
                 <span id="maxOwnRows">
                     <label for="txtMaxOwnRows">Max rows visible:</label>

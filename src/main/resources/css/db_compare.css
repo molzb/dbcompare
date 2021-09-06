@@ -19,6 +19,7 @@ body {
 
 .row {
     width: 100%;
+    clear: both;
 }
 
 .btn {
@@ -66,6 +67,10 @@ span.short {
     display: inline-block;
 }
 
+#divTableComparison {
+    border-top: 1px solid lightgray;
+}
+
 #divTableContents h3,
 #divTableComparison h3 {
     margin-bottom: 0;
@@ -96,8 +101,13 @@ span.short {
     float: right;
 }
 
-.compareWithMsg {
+.msg {
     color: green;
+}
+
+.msgCentered {
+    color: green;
+    text-align: center;
 }
 
 #chkToggleEmptyTables,
