@@ -227,6 +227,10 @@ span.short {
     cursor: pointer;
 }
 
+.primaryKey {
+    color: cornflowerblue;
+}
+
 .loading,
 .loadingOwn {
     width: 16px;

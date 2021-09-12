@@ -2,12 +2,17 @@
 /* jshint esversion: 6 */
 /* globals $, $all: false */
 'use strict';
+var tables = {};
+
+var tablesPks = {};
+
 var rows = {
     areDifferent: false,
     fields: [],
     fieldId: '',
 
     all: {},
+    selected: {},
     different: {},
     identical: {},
     withSameId: {},
@@ -184,7 +189,7 @@ function pingDbs() {
             var dbAvailable = js;
             var i = 0;
             $all('#chkDbsOnTheLeft input').forEach(c => addTooltip(dbAvailable, c, i++));
-            var i = 0;
+            i = 0;
             $all('#chkDbsOnTheRight input').forEach(c => addTooltip(dbAvailable, c, i++));
         });
     });
@@ -232,6 +237,10 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
                 }
 
                 response.json().then(rows => {
+                    tables[dbName] = { rendered: {}, pks: {} };
+                    tables[dbName].rendered = rows;
+                    readPrimaryKeysOfTables(dbName, tables[dbName]);
+
                     var h3 = `<h3>${dbName}</h3>`;
                     var tbl = createTable(rows, dbName, true); // + "_Overview");
                     var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}</div>`;
@@ -248,6 +257,24 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
             }
         ).catch(error => $('#txtErrorDb').innerHTML += error);
     });
+}
+
+function readPrimaryKeysOfTables(dbName, tablesToEnrich) {
+    var sql = "SELECT table_name, column_name FROM all_cons_columns WHERE constraint_name IN " +
+        "(SELECT constraint_name FROM user_constraints WHERE CONSTRAINT_TYPE = 'P' AND OWNER = '%o')";
+
+    $('#txtErrorDb').empty();
+    var sqlDb = sql.replace('%o', dbName);
+    fetch('select.json', { method: 'post', body: dbName + ';' + sqlDb }).then(response => {
+        if (response.status !== 200)
+            $('#txtErrorDb').innerHTML += "AJAX error: " + response.status + "->" + response.statusText;
+        response.json().then(pks => {
+            tablesToEnrich.rendered.forEach(t => {
+                var pksForTable = pks.filter(pk => pk.TABLE_NAME === t.TABLES);
+                t.pks = pksForTable;
+            })
+        })
+    }).catch(error => $('#txtErrorDb').innerHTML += error);
 }
 
 // split tables horizontally, e.g. tbl1 33%| tbl2 33%| tbl3 33%
@@ -308,7 +335,9 @@ function showColumnsOfTable(e) {
     readColumnNames(getCheckedDbs(), selectedTable, (dbNameAndColumns) => {
         var dbName = dbNameAndColumns[0];
         var columnNames = dbNameAndColumns[1];
-        renderCheckboxesForTableColumns(dbName, selectedTable, columnNames);
+        var pkStruct = tables[dbName].rendered.find(r => r.TABLES === selectedTable).pks;
+        var pks = pkStruct.length === 0 ? [] : pkStruct.map(pk => pk.COLUMN_NAME);
+        renderCheckboxesForTableColumns(dbName, selectedTable, columnNames, pks);
         td.dataset.columnsloaded = 'true';
         // TODO
         // getRowCountOfTable(dbName, selectedTable, (cnt) => td.find('.cnt').innerHTML += ` [${cnt} rows]`);
@@ -320,7 +349,7 @@ function getRowCountOfTable(dbName, tbl, callback) {
     fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(
         response => {
             if (response.status === 400) {
-                showError(reponse.statusText);
+                showError(response.statusText);
             }
             response.json().then(rows => callback(rows[0].CNT));
         });
@@ -334,7 +363,7 @@ function hideLastSelected(td) {
     lastClickedTdInOverview = td;
 }
 
-function renderCheckboxesForTableColumns(dbName, selectedTable, columnNames) {
+function renderCheckboxesForTableColumns(dbName, selectedTable, columnNames, primaryKeys) {
     var allTdsInTableForDbname = $all('#tbl' + dbName + ' td');
     var tds = allTdsInTableForDbname.filter(currentTd => currentTd.innerText.includes(selectedTable));
     if (tds.length === 0)
@@ -346,7 +375,9 @@ function renderCheckboxesForTableColumns(dbName, selectedTable, columnNames) {
     } else {
         innerHTML += '<input type="checkbox" class="star" name="star" onchange="selectAsterisk(this)">* &nbsp;&nbsp;';
         columnNames.forEach(c => {
-            innerHTML += `<input type="checkbox" class="col" name="${c}" onchange="addColToSelect(this)" value="${c}">${c}`;
+            var classPk = primaryKeys.includes(c) ? 'class="primaryKey"' : '';
+            innerHTML += `<input type="checkbox" class="col" name="${c}" onchange="addColToSelect(this)" value="${c}">`;
+            innerHTML += `<span ${classPk}>${c}</span>`;
         });
     }
     td.innerHTML += `<div class="tableSelected">${innerHTML}</div>`;
@@ -451,23 +482,7 @@ function execSql(sql, isOwnSql) {
         return;
     }
 
-    var where = isOwnSql ? '' : $('#txtWhere').innerHTML,
-        orderBy = isOwnSql ? '' : $('#txtOrderBy').innerHTML,
-        txtMaxRows = isOwnSql ? $('#txtMaxOwnRows').value : $('#txtMaxRows').value;
-    if (isOwnSql) {
-        if (sql.includes('WHERE ')) {
-            sql = sql.replace('WHERE ', `WHERE rownum <= ${txtMaxRows} AND `);
-        } else if (sql.includes('ORDER BY')) {
-            sql = sql.replace('ORDER BY', `WHERE rownum <= ${txtMaxRows} ORDER BY`);
-        } else {
-            sql += `WHERE rownum <= ${txtMaxRows}`;
-        }
-    } else {
-        sql += where !== '' ? ' WHERE ' + where : '';
-        sql += where.toLowerCase().includes('rownum') ? '' : (where === '' ? ` WHERE rownum <= ${txtMaxRows}` : ` AND rownum <= ${txtMaxRows}`);
-    }
-
-    sql += orderBy !== '' ? ' ORDER BY ' + orderBy : '';
+    sql = enhanceSelectStatement(sql, isOwnSql);
 
     var t1ms = parseInt(window.performance.now());
     isOwnSql ? $('.loadingOwn').show() : $('.loading').show();
@@ -518,6 +533,30 @@ function execSql(sql, isOwnSql) {
             }
         }).catch(error => showError(error));
     });
+}
+
+/**
+ * Enrich SELECT statement with WHERE + ORDER BY + rownum
+ */
+function enhanceSelectStatement(sql, isOwnSql) {
+    var where = isOwnSql ? '' : $('#txtWhere').innerHTML,
+        orderBy = isOwnSql ? '' : $('#txtOrderBy').innerHTML,
+        txtMaxRows = isOwnSql ? $('#txtMaxOwnRows').value : $('#txtMaxRows').value;
+    if (isOwnSql) {
+        if (sql.includes('WHERE ')) {
+            sql = sql.replace('WHERE ', `WHERE rownum <= ${txtMaxRows} AND `);
+        } else if (sql.includes('ORDER BY')) {
+            sql = sql.replace('ORDER BY', `WHERE rownum <= ${txtMaxRows} ORDER BY`);
+        } else {
+            sql += `WHERE rownum <= ${txtMaxRows}`;
+        }
+    } else {
+        sql += where !== '' ? ' WHERE ' + where : '';
+        sql += where.toLowerCase().includes('rownum') ? '' : (where === '' ? ` WHERE rownum <= ${txtMaxRows}` : ` AND rownum <= ${txtMaxRows}`);
+    }
+
+    sql += orderBy !== '' ? ' ORDER BY ' + orderBy : '';
+    return sql;
 }
 
 function addMouseEnterEventsInAllRows(tbl) {
@@ -575,7 +614,7 @@ function createTable(rows, dbName, isOverview) {
     rows.forEach(r => {
         tr = '';
         if (isOverview) {
-            tr += td.replace('%s', r['TABLES']).replace('%t', r['TABLES']).replace("%c", r['NUM_ROWS']);
+            tr += td.replace('%s', r.TABLES).replace('%t', r.TABLES).replace("%c", r.NUM_ROWS);
         } else {
             headers.forEach(h => {
                 if (h !== 'hasEqual' && h !== 'hasDiff') { // TODO -> ugly 
