@@ -1,10 +1,8 @@
 /* db_compare.js */
 /* jshint esversion: 6 */
-/* globals $, $all: false */
+/* globals $, Err, window, document, fetch, localStorage, console, $all: false */
 'use strict';
 var tables = {};
-
-var tablesPks = {};
 
 var rows = {
     areDifferent: false,
@@ -18,6 +16,10 @@ var rows = {
     withSameId: {},
     onlyIn: {}
 };
+
+// TODO
+// rows.all["DOXIS"] = 
+// { cols: {LOG_DATE: '2019-12-21 18:31:16', LOG_LVL: 'INFO    ', LOG_MSG: 'Test', LOG_ID: '1'}, hasEqual: 0, pk: ["x","y"], hasDiff : 2, fields : ["LOG_DATE", "LOG_LVL"]}
 
 function jsonIsEqual(json1, json2) {
     if (json1 === json2)
@@ -104,6 +106,7 @@ function showResultTable(db, theseRows) {
     var count = theseRows[db].length;
     tblForDB.innerHTML = createTable(theseRows[db], db, false);
     tblForDB.nextElementSibling.innerHTML = `Showing ${count} results.`;
+    addMouseEnterEventsInAllRows($(`#divTableContents #tbl${db}`));
 }
 
 function showInBothButDifferent() {
@@ -137,11 +140,11 @@ function keyupSql(e) {
 
 function getDbNames(callback) {
     return new Promise((resolve, reject) => {
-        fetch('conns.json').then(response => {
+        fetch('conns.json').then(Err.handle).then(response => {
             response.json().then(json => {
                 resolve(json.dbNames);
             });
-        });
+        }).catch(Err.handleFetch);
     });
 }
 
@@ -184,7 +187,7 @@ function toggleEmptyTables(checked) {
 
 // Ping all databases in db.properties and disable checkboxes if necessary
 function pingDbs() {
-    fetch('pingDBs.json').then(response => {
+    fetch('pingDBs.json').then(Err.handle).then(response => {
         response.json().then(js => {
             var dbAvailable = js;
             var i = 0;
@@ -192,7 +195,7 @@ function pingDbs() {
             i = 0;
             $all('#chkDbsOnTheRight input').forEach(c => addTooltip(dbAvailable, c, i++));
         });
-    });
+    }).catch(Err.handleFetch);
 }
 
 function addTooltip(dbAvailable, elem, i) {
@@ -229,13 +232,8 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
     // do a SELECT for the tables in the database
     dbs.forEach(dbName => {
         var sqlDb = sql.replace('%o', dbName);
-        fetch('select.json', { method: 'post', body: dbName + ';' + sqlDb }).then(
+        fetch('select.json', { method: 'post', body: dbName + ';' + sqlDb }).then(Err.handle).then(
             response => {
-                if (response.status === 400) {
-                    response.json().then(j => $('#txtErrorDb').innerHTML += j.error);
-                    return;
-                }
-
                 response.json().then(rows => {
                     tables[dbName] = { rendered: {}, pks: {} };
                     tables[dbName].rendered = rows;
@@ -255,26 +253,23 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
                     }
                 });
             }
-        ).catch(error => $('#txtErrorDb').innerHTML += error);
+        ).catch(Err.handleFetch);
     });
 }
 
 function readPrimaryKeysOfTables(dbName, tablesToEnrich) {
-    var sql = "SELECT table_name, column_name FROM all_cons_columns WHERE constraint_name IN " +
-        "(SELECT constraint_name FROM user_constraints WHERE CONSTRAINT_TYPE = 'P' AND OWNER = '%o')";
+    var sqlDb = `SELECT table_name, column_name FROM all_cons_columns WHERE constraint_name IN
+        (SELECT constraint_name FROM user_constraints WHERE CONSTRAINT_TYPE = 'P' AND OWNER = '${dbName}')`;
 
     $('#txtErrorDb').empty();
-    var sqlDb = sql.replace('%o', dbName);
-    fetch('select.json', { method: 'post', body: dbName + ';' + sqlDb }).then(response => {
-        if (response.status !== 200)
-            $('#txtErrorDb').innerHTML += "AJAX error: " + response.status + "->" + response.statusText;
+    fetch('select.json', { method: 'post', body: dbName + ';' + sqlDb }).then(Err.handle).then(response => {
         response.json().then(pks => {
             tablesToEnrich.rendered.forEach(t => {
                 var pksForTable = pks.filter(pk => pk.TABLE_NAME === t.TABLES);
                 t.pks = pksForTable;
-            })
-        })
-    }).catch(error => $('#txtErrorDb').innerHTML += error);
+            });
+        });
+    }).catch(Err.handleFetch);
 }
 
 // split tables horizontally, e.g. tbl1 33%| tbl2 33%| tbl3 33%
@@ -335,24 +330,19 @@ function showColumnsOfTable(e) {
     readColumnNames(getCheckedDbs(), selectedTable, (dbNameAndColumns) => {
         var dbName = dbNameAndColumns[0];
         var columnNames = dbNameAndColumns[1];
-        var pkStruct = tables[dbName].rendered.find(r => r.TABLES === selectedTable).pks;
-        var pks = pkStruct.length === 0 ? [] : pkStruct.map(pk => pk.COLUMN_NAME);
+        var pkTable = tables[dbName].rendered.find(r => r.TABLES === selectedTable);
+        var pks = (pkTable && pkTable.pks.length > 0) ? pkTable.pks.map(pk => pk.COLUMN_NAME) : [];
         renderCheckboxesForTableColumns(dbName, selectedTable, columnNames, pks);
         td.dataset.columnsloaded = 'true';
-        // TODO
-        // getRowCountOfTable(dbName, selectedTable, (cnt) => td.find('.cnt').innerHTML += ` [${cnt} rows]`);
+        getRowCountOfTable(dbName, selectedTable, (cnt) => td.find(`#tbl${dbName} .cnt`).innerHTML += ` [${cnt} rows]`);
     });
 }
 
 function getRowCountOfTable(dbName, tbl, callback) {
     var sql = `SELECT COUNT(*) AS cnt FROM ${tbl}`;
-    fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(
-        response => {
-            if (response.status === 400) {
-                showError(response.statusText);
-            }
-            response.json().then(rows => callback(rows[0].CNT));
-        });
+    fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(Err.handle).then(
+        response => response.json().then(rows => callback(rows[0].CNT))
+    ).catch(Err.handleFetch);
 }
 
 function hideLastSelected(td) {
@@ -365,37 +355,34 @@ function hideLastSelected(td) {
 
 function renderCheckboxesForTableColumns(dbName, selectedTable, columnNames, primaryKeys) {
     var allTdsInTableForDbname = $all('#tbl' + dbName + ' td');
-    var tds = allTdsInTableForDbname.filter(currentTd => currentTd.innerText.includes(selectedTable));
-    if (tds.length === 0)
+    var td = allTdsInTableForDbname.find(cell => cell.innerText.includes(selectedTable));
+    if (td === undefined)
         return;
-    var td = tds[0];
-    var innerHTML = '';
-    if (columnNames.length === 0) {
-        innerHTML += 'No columns in table';
-    } else {
-        innerHTML += '<input type="checkbox" class="star" name="star" onchange="selectAsterisk(this)">* &nbsp;&nbsp;';
+    var innerHTML = 'No columns in table';
+    if (columnNames.length > 0) {
+        innerHTML = '<input type="checkbox" class="star" name="star" onchange="selectAsterisk(this)">* &nbsp;&nbsp;';
         columnNames.forEach(c => {
             var classPk = primaryKeys.includes(c) ? 'class="primaryKey"' : '';
             innerHTML += `<input type="checkbox" class="col" name="${c}" onchange="addColToSelect(this)" value="${c}">`;
             innerHTML += `<span ${classPk}>${c}</span>`;
         });
     }
+    innerHTML += '<span class="cnt"></span>';
     td.innerHTML += `<div class="tableSelected">${innerHTML}</div>`;
 }
 
 function readColumnNames(dbs, selectedTable, callback) {
     dbs.forEach(dbName => {
-        var sql = "SELECT (LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_id)) cols " +
-            "FROM sys.all_tab_columns WHERE table_name = '%t' AND owner = UPPER('%o')";
-        sql = sql.replace('%t', selectedTable).replace('%o', dbName);
-        fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(
+        var sql = `SELECT (LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_id)) cols 
+            FROM sys.all_tab_columns WHERE table_name = '${selectedTable}' AND owner = UPPER('${dbName}')`;
+        fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(Err.handle).then(
             response => {
                 response.json().then(js => {
                     var cols = js.length === 0 ? [] : js[0].COLS.split(',');
                     callback([dbName, cols]);
                 });
             }
-        );
+        ).catch(Err.handleFetch);
     });
 }
 
@@ -418,16 +405,17 @@ function selectAsterisk(checkbox) {
 
 function addColToSelect(checkbox) {
     var td = checkbox.closest('td');
+    var selectedTable = td.dataset.tbl;
     var checkboxesInTd = Array.from(td.getElementsByTagName('input'));
     $('.star').checked = false;
 
-    var sql = 'SELECT %c FROM %t';
     var cols = [];
     checkboxesInTd.forEach(c => { if (c.checked) cols.push(c.value); });
     if (cols.length > 0) {
-        var selectedTable = td.dataset.tbl;
+        var colsJoined = cols.join(',');
+        var sql = `SELECT ${colsJoined} FROM ${selectedTable}`;
         $('.row.generatedSql').show();
-        $('#txtSql').innerHTML = sql.replace('%c', cols.join(',')).replace('%t', selectedTable);
+        $('#txtSql').innerHTML = sql.replace('%c', cols.join(','));
     } else {
         $('.row.generatedSql').hide();
     }
@@ -460,16 +448,15 @@ function sortBy(elem, col, reverse) {
 function toggleFilter(th) {
     // Element after <th> is <input text ...>, this is to be toggled
     var inputElem = th.nextElementSibling;
-    var classList = inputElem.classList;
-    classList.contains('vHidden') ? classList.remove('vHidden') : classList.add('vHidden');
+    inputElem.toggleClass('vHidden');
 }
 
 function filterChanged(elem, col) {
     var tableToBeUpdated = elem.closest('table');
     var dbName = tableToBeUpdated.id.substring(3);
-    var rows = rows.all[dbName].filter(row => row[col].includes(elem.value));
-    tableToBeUpdated.innerHTML = createTable(rows, dbName, false);
-    $('.resultCount').innerHTML = getRowCount(performance.now(), rows.length);
+    var filteredRows = rows.all[dbName].filter(row => row[col].includes(elem.value));
+    tableToBeUpdated.innerHTML = createTable(filteredRows, dbName, false);
+    $('.resultCount').innerHTML = getRowCount(performance.now(), filteredRows.length);
 }
 
 function execSql(sql, isOwnSql) {
@@ -485,53 +472,49 @@ function execSql(sql, isOwnSql) {
     sql = enhanceSelectStatement(sql, isOwnSql);
 
     var t1ms = parseInt(window.performance.now());
-    isOwnSql ? $('.loadingOwn').show() : $('.loading').show();
+    if (isOwnSql)
+        $('.loadingOwn').show();
+    else
+        $('.loading').show();
     var dbs = getCheckedDbs();
     var lastDb = dbs[dbs.length - 1];
 
     $('#divTableContents').empty();
     var divTableContentInnerHTML = '';
     dbs.forEach(dbName => {
-        fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(response => {
-            if (response.status === 400) { // Bad Request
-                response.text().then(data => {
-                    $('#txtError').innerHTML += ': ' + data;
-                });
-                showError('Cannot parse SQL');
-            } else { // Request is ok
-                response.json().then(rowsFromDb => {
-                    $('.loading').hide();
-                    $('.loadingOwn').hide();
-                    $('#txtError').empty();
+        fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(Err.handleSql).then(response => {
+            response.json().then(rowsFromDb => {
+                $('.loading').hide();
+                $('.loadingOwn').hide();
+                $('#sqlError').empty();
 
-                    rows.all[dbName] = rowsFromDb;
-                    var h3 = `<h3>${dbName}</h3>`;
-                    var tbl = createTable(rows.all[dbName], dbName, false);
-                    var rowCount = getRowCount(t1ms, rows.all[dbName].length);
-                    var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}${rowCount}</div>`;
-                    divTableContentInnerHTML += wrapperForH3AndTbl;
+                rows.all[dbName] = rowsFromDb;
+                var h3 = `<h3>${dbName}</h3>`;
+                var tbl = createTable(rows.all[dbName], dbName, false);
+                var rowCount = getRowCount(t1ms, rows.all[dbName].length);
+                var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}${rowCount}</div>`;
+                divTableContentInnerHTML += wrapperForH3AndTbl;
 
-                    if (rows.all[dbName].length > 0) {
-                        // Get Database columns (e.g. col1, col2) as array
-                        rows.fields = Object.keys(rows.all[dbName][0]);
-                    }
+                if (rows.all[dbName].length > 0) {
+                    // Get Database columns (e.g. col1, col2) as array
+                    rows.fields = Object.keys(rows.all[dbName][0]);
+                }
 
-                    if (dbName === lastDb) {
-                        $('#divTableContents').innerHTML = divTableContentInnerHTML;
+                if (dbName === lastDb) {
+                    $('#divTableContents').innerHTML = divTableContentInnerHTML;
 
-                        compareTables(rows.all[dbs[0]], rows.all[dbs[1]], dbs);
-                        if (rows.areDifferent)
-                            $('#comparisonButtons').show();
-                        else
-                            $('#comparisonButtons').hide();
+                    compareTables(rows.all[dbs[0]], rows.all[dbs[1]], dbs);
+                    if (rows.areDifferent)
+                        $('#comparisonButtons').show();
+                    else
+                        $('#comparisonButtons').hide();
 
-                        alignTablesHorizontally('#divTableContents .tblWrapper', dbs.length);
-                        window.scrollTo(0, $('.generatedSql').offsetTop);
-                        addMouseEnterEventsInAllRows($(`#divTableContents #tbl${dbs[0]}`));
-                    }
-                });
-            }
-        }).catch(error => showError(error));
+                    alignTablesHorizontally('#divTableContents .tblWrapper', dbs.length);
+                    window.scrollTo(0, $('.generatedSql').offsetTop);
+                    addMouseEnterEventsInAllRows($(`#divTableContents #tbl${dbs[0]}`));
+                }
+            });
+        }).catch(Err.handleFetch);
     });
 }
 
@@ -542,7 +525,7 @@ function enhanceSelectStatement(sql, isOwnSql) {
     var where = isOwnSql ? '' : $('#txtWhere').innerHTML,
         orderBy = isOwnSql ? '' : $('#txtOrderBy').innerHTML,
         txtMaxRows = isOwnSql ? $('#txtMaxOwnRows').value : $('#txtMaxRows').value;
-    if (isOwnSql) {
+    if (isOwnSql) { // own SELECT statement
         if (sql.includes('WHERE ')) {
             sql = sql.replace('WHERE ', `WHERE rownum <= ${txtMaxRows} AND `);
         } else if (sql.includes('ORDER BY')) {
@@ -550,12 +533,12 @@ function enhanceSelectStatement(sql, isOwnSql) {
         } else {
             sql += `WHERE rownum <= ${txtMaxRows}`;
         }
-    } else {
+    } else { // generated SELECT statement
         sql += where !== '' ? ' WHERE ' + where : '';
         sql += where.toLowerCase().includes('rownum') ? '' : (where === '' ? ` WHERE rownum <= ${txtMaxRows}` : ` AND rownum <= ${txtMaxRows}`);
+        sql += orderBy !== '' ? ' ORDER BY ' + orderBy : '';
     }
 
-    sql += orderBy !== '' ? ' ORDER BY ' + orderBy : '';
     return sql;
 }
 
@@ -582,15 +565,6 @@ function addMouseEnterEventsInAllRows(tbl) {
             });
         });
     }
-}
-
-function showError(error) {
-    $('#comparisonResult').empty();
-    if ($('.resultCount'))
-        $('.resultCount').empty();
-    $('#txtError').innerHTML = error;
-    $('.loading').hide();
-    $('.loadingOwn').hide();
 }
 
 function createTable(rows, dbName, isOverview) {
@@ -645,7 +619,7 @@ function getRowCount(t1ms, count) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    getDbNames().then(dbNames => renderDbCheckboxes(dbNames)).
+    getDbNames().then(dbName => renderDbCheckboxes(dbName)).
     then(checkedDbs => {
         readTablesForOverview(checkedDbs);
         pingDbs();
