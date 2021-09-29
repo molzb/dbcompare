@@ -208,6 +208,10 @@ span.short {
     background-color: #ddd;
 }
 
+.tblSql tr.hoverDiff {
+    background-color: #e0c0c0;
+}
+
 .tblSql th {
     padding-top: 12px;
     padding-bottom: 12px;

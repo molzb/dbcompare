@@ -3,6 +3,7 @@
 /* globals $, Err, window, document, fetch, localStorage, console, $all: false */
 'use strict';
 var tables = {};
+var selectedTable = '';
 
 var rows = {
     areDifferent: false,
@@ -17,16 +18,15 @@ var rows = {
     onlyIn: {}
 };
 
-// TODO
 // rows.all["DOXIS"] = 
 // { cols: {LOG_DATE: '2019-12-21 18:31:16', LOG_LVL: 'INFO    ', LOG_MSG: 'Test', LOG_ID: '1'}, hasEqual: 0, pk: ["x","y"], hasDiff : 2, fields : ["LOG_DATE", "LOG_LVL"]}
-
-function jsonIsEqual(json1, json2) {
+function jsonIsEqual(json1, json2, colsToCompare) {
     if (json1 === json2)
         return true;
     var isEqual = true;
-    for (var i = 0; i < rows.fields.length; i++) {
-        if (json1[rows.fields[i]] !== json2[rows.fields[i]]) {
+    for (var i = 0; i < colsToCompare.length; i++) {
+        var col = colsToCompare[i];
+        if (json1[col] !== json2[col]) {
             isEqual = false;
             break;
         }
@@ -46,12 +46,12 @@ function jsonClone(json) {
  * @param {*} rows2 resultset of database 2
  * @param {*} checkedDbs the selected databases
  */
-function compareTables(rows1, rows2, checkedDbs) {
+function compareTables(rows1, rows2, checkedDbs, tbl, colsToCompare) {
     rows.areDifferent = JSON.stringify(rows1) !== JSON.stringify(rows2);
     if (rows.areDifferent) {
         for (var i1 = 0; i1 < rows1.length; i1++) {
             for (var i2 = 0; i2 < rows2.length; i2++) {
-                if (!rows1[i1].hasEqual && !rows2[i2].hasEqual && jsonIsEqual(rows1[i1], rows2[i2])) {
+                if (!rows1[i1].hasEqual && !rows2[i2].hasEqual && jsonIsEqual(rows1[i1], rows2[i2], colsToCompare)) {
                     rows1[i1].hasEqual = i2;
                     rows2[i2].hasEqual = i1;
                     break;
@@ -66,16 +66,16 @@ function compareTables(rows1, rows2, checkedDbs) {
     }
     var db1 = checkedDbs[0],
         db2 = checkedDbs[1];
-    rows.different[db1] = jsonClone(rows.all[db1].filter(r => r.hasEqual == undefined));
-    rows.different[db2] = jsonClone(rows.all[db2].filter(r => r.hasEqual == undefined));
-    rows.identical[db1] = jsonClone(rows.all[db1].filter(r => r.hasEqual));
-    rows.identical[db2] = jsonClone(rows.all[db2].filter(r => r.hasEqual));
-    compareRowsWithSameIds(rows.different[db1], rows.different[db2]);
+    rows.different[db1] = rows.all[db1].filter(r => r.hasEqual == undefined);
+    rows.different[db2] = rows.all[db2].filter(r => r.hasEqual == undefined);
+    rows.identical[db1] = rows.all[db1].filter(r => r.hasEqual);
+    rows.identical[db2] = rows.all[db2].filter(r => r.hasEqual);
+    compareRowsWithSameIds(rows.different[db1], rows.different[db2], tbl, colsToCompare);
 
-    rows.withSameId[db1] = jsonClone(rows.different[db1].filter(r => r.hasDiff));
-    rows.withSameId[db2] = jsonClone(rows.different[db2].filter(r => r.hasDiff));
-    rows.onlyIn[db1] = jsonClone(rows.different[db1].filter(r => r.hasDiff == undefined));
-    rows.onlyIn[db2] = jsonClone(rows.different[db2].filter(r => r.hasDiff == undefined));
+    rows.withSameId[db1] = rows.different[db1].filter(r => r.hasDiff);
+    rows.withSameId[db2] = rows.different[db2].filter(r => r.hasDiff);
+    rows.onlyIn[db1] = rows.different[db1].filter(r => r.hasDiff == undefined);
+    rows.onlyIn[db2] = rows.different[db2].filter(r => r.hasDiff == undefined);
 
     var diff1Len = rows.different[db1].length,
         diff2Len = rows.different[db2].length;
@@ -83,30 +83,62 @@ function compareTables(rows1, rows2, checkedDbs) {
     $('#comparisonResult').innerHTML = rows.areDifferent ? result : 'All rows are identical';
 }
 
-function compareRowsWithSameIds(rows1, rows2) {
-    // TODO Read Resultset Metadata
-    var fieldsWithId = rows.fields.filter(f => f.toLowerCase().startsWith('id') || f.toLowerCase().endsWith('id'));
-    if (fieldsWithId.length === 0) {
-        return;
+function getPrimaryKeysOfTable(tbl) {
+    var pksStruct = tables[getCheckedDbs()[0]].find(t => t.TABLE_NAME == tbl).pks;
+    if (pksStruct.length === 0) {
+        return [];
     }
-    rows.fieldId = fieldsWithId[0].toString();
+    return Array.from(new Set(pksStruct.map(t => t.COLUMN_NAME))); // PKS without duplicates
+}
+
+function compareRowsWithSameIds(rows1, rows2, tbl, colsToCompare) {
+    var pks = getPrimaryKeysOfTable(tbl);
+    var colsWithoutPk = colsToCompare.filter(f => !pks.includes(f)); // the cols that will be checked for changes
+
+    var pkLen = pks.length;
     for (var i1 = 0; i1 < rows1.length; i1++) {
         for (var i2 = 0; i2 < rows2.length; i2++) {
-            if (rows1[i1][rows.fieldId] === rows2[i2][rows.fieldId]) {
-                rows1[i1].hasDiff = i2;
-                rows2[i2].hasDiff = i1;
+            var row1 = rows1[i1],
+                row2 = rows2[i2];
+            var equalInPrimaryField = false;
+            // I suppose here, that we have max 3 primary keys
+            if (pkLen >= 1) // verbose style for better readibility
+                equalInPrimaryField = row1[pks[0]] == row2[pks[0]];
+            if (equalInPrimaryField && pkLen >= 2)
+                equalInPrimaryField = row1[pks[1]] == row2[pks[1]];
+            if (equalInPrimaryField && pkLen >= 3)
+                equalInPrimaryField = row1[pks[2]] == row2[pks[2]];
+
+            if (equalInPrimaryField) {
+                row1.hasDiff = i2;
+                row2.hasDiff = i1;
+                enrichRowsWithDiffInCols(row1, row2, colsWithoutPk);
                 break;
             }
         }
     }
 }
 
-function showResultTable(db, theseRows) {
-    var tblForDB = $("#sqlResult #tbl" + db);
-    var count = theseRows[db].length;
-    tblForDB.innerHTML = createTable(theseRows[db], db, false);
+function enrichRowsWithDiffInCols(row1, row2, colsWithoutPk) {
+    var diffInCols = [];
+    colsWithoutPk.forEach(col => {
+        if (row1[col] !== row2[col]) {
+            diffInCols.push(col);
+        }
+    });
+    row1.diffInCols = diffInCols;
+    row2.diffInCols = diffInCols;
+
+    row1.diffInCols.forEach(c => row1[c] = '<i>' + row1[c] + '</i>');
+    row2.diffInCols.forEach(c => row2[c] = '<i>' + row2[c] + '</i>');
+}
+
+function showResultTable(dbName, theseRows) {
+    var tblForDB = $("#sqlResult #tbl" + dbName);
+    var count = theseRows[dbName].length;
+    tblForDB.innerHTML = createTable(theseRows[dbName], dbName, false, rows.all[dbName].fields);
     tblForDB.nextElementSibling.innerHTML = `Showing ${count} results.`;
-    addMouseEnterEventsInAllRows($(`#divTableContents #tbl${db}`));
+    addMouseEnterToHighlightCounterpart($(`#divTableContents #tbl${dbName}`));
 }
 
 function showInBothButDifferent() {
@@ -136,6 +168,16 @@ function keyupSql(e) {
         execSql($('#txtSql').innerHTML);
     }
     return false;
+}
+
+/**
+ * Add a field idx to this json array to better identify a record<br/>
+ * Example: jsonArray = [{"key": "v1"},{"key": "v2"}] -> [{"key": "v1", idx: 0}, {"key": "v2", idx: 1}...
+ */
+function enrichWithIndex(jsonArray) {
+    var idx = 0;
+    jsonArray.forEach(j => j.idx = idx++); // add index to better identify these tables
+    return jsonArray;
 }
 
 function getDbNames(callback) {
@@ -226,7 +268,7 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
     $('#divTableComparison').empty();
     $('#txtErrorDb').empty();
 
-    var sql = "SELECT table_name AS tables, num_rows FROM sys.all_tables WHERE owner = '%o' %s ORDER BY table_name";
+    var sql = "SELECT table_name, num_rows FROM sys.all_tables WHERE owner = '%o' %s ORDER BY table_name";
     sql = sql.replace('%s', showEmptyTables ? "" : "AND num_rows > 0");
 
     // do a SELECT for the tables in the database
@@ -234,13 +276,12 @@ function readTablesFromCheckedDbs(dbs, showEmptyTables) {
         var sqlDb = sql.replace('%o', dbName);
         fetch('select.json', { method: 'post', body: dbName + ';' + sqlDb }).then(Err.handle).then(
             response => {
-                response.json().then(rows => {
-                    tables[dbName] = { rendered: {}, pks: {} };
-                    tables[dbName].rendered = rows;
+                response.json().then(tbls => {
+                    tables[dbName] = enrichWithIndex(tbls);
                     readPrimaryKeysOfTables(dbName, tables[dbName]);
 
                     var h3 = `<h3>${dbName}</h3>`;
-                    var tbl = createTable(rows, dbName, true); // + "_Overview");
+                    var tbl = createTable(tables[dbName], dbName, true, ["TABLES"]);
                     var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}</div>`;
 
                     $('#divTableComparison').innerHTML += wrapperForH3AndTbl;
@@ -264,8 +305,8 @@ function readPrimaryKeysOfTables(dbName, tablesToEnrich) {
     $('#txtErrorDb').empty();
     fetch('select.json', { method: 'post', body: dbName + ';' + sqlDb }).then(Err.handle).then(response => {
         response.json().then(pks => {
-            tablesToEnrich.rendered.forEach(t => {
-                var pksForTable = pks.filter(pk => pk.TABLE_NAME === t.TABLES);
+            tablesToEnrich.forEach(t => {
+                var pksForTable = pks.filter(pk => pk.TABLE_NAME === t.TABLE_NAME);
                 t.pks = pksForTable;
             });
         });
@@ -326,12 +367,11 @@ function showColumnsOfTable(e) {
 
     hideLastSelected(td);
 
-    var selectedTable = td.dataset.tbl;
+    selectedTable = td.dataset.tbl;
     readColumnNames(getCheckedDbs(), selectedTable, (dbNameAndColumns) => {
         var dbName = dbNameAndColumns[0];
         var columnNames = dbNameAndColumns[1];
-        var pkTable = tables[dbName].rendered.find(r => r.TABLES === selectedTable);
-        var pks = (pkTable && pkTable.pks.length > 0) ? pkTable.pks.map(pk => pk.COLUMN_NAME) : [];
+        var pks = getPrimaryKeysOfTable(selectedTable);
         renderCheckboxesForTableColumns(dbName, selectedTable, columnNames, pks);
         td.dataset.columnsloaded = 'true';
         getRowCountOfTable(dbName, selectedTable, (cnt) => td.find(`#tbl${dbName} .cnt`).innerHTML += ` [${cnt} rows]`);
@@ -375,14 +415,13 @@ function readColumnNames(dbs, selectedTable, callback) {
     dbs.forEach(dbName => {
         var sql = `SELECT (LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_id)) cols 
             FROM sys.all_tab_columns WHERE table_name = '${selectedTable}' AND owner = UPPER('${dbName}')`;
-        fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(Err.handle).then(
-            response => {
-                response.json().then(js => {
-                    var cols = js.length === 0 ? [] : js[0].COLS.split(',');
-                    callback([dbName, cols]);
-                });
-            }
-        ).catch(Err.handleFetch);
+        fetch('select.json', { method: 'post', body: dbName + ';' + sql }).then(Err.handle).then(response => {
+            response.json().then(js => {
+                var cols = js.length === 0 ? [] : js[0].COLS.split(',');
+                tables[dbName].find(t => t.TABLE_NAME === selectedTable).cols = cols;
+                callback([dbName, cols]);
+            });
+        }).catch(Err.handleFetch);
     });
 }
 
@@ -393,7 +432,7 @@ function selectAsterisk(checkbox) {
     checkboxesInTd.forEach(c => { c.checked = starIsChecked; });
 
     if (starIsChecked) {
-        var selectedTable = td.dataset.tbl;
+        selectedTable = td.dataset.tbl;
         var sql = 'SELECT * FROM ' + selectedTable;
         $('.row.generatedSql').show();
         $('#txtSql').innerHTML = sql;
@@ -441,7 +480,7 @@ function sortBy(elem, col, reverse) {
     var tableToBeUpdated = elem.closest('table');
     var dbName = tableToBeUpdated.id.substring(3);
     rows.all[dbName].sort((a, b) => reverse ? a[col].localeCompare(b[col]) : b[col].localeCompare(a[col]));
-    tableToBeUpdated.innerHTML = createTable(rows.all[dbName], dbName, false);
+    tableToBeUpdated.innerHTML = createTable(rows.all[dbName], dbName, false, rows.all[dbName].fields);
 }
 
 /** Toggles Filter visibility (textfield) in table header */
@@ -455,7 +494,7 @@ function filterChanged(elem, col) {
     var tableToBeUpdated = elem.closest('table');
     var dbName = tableToBeUpdated.id.substring(3);
     var filteredRows = rows.all[dbName].filter(row => row[col].includes(elem.value));
-    tableToBeUpdated.innerHTML = createTable(filteredRows, dbName, false);
+    tableToBeUpdated.innerHTML = createTable(filteredRows, dbName, false, rows.all[dbName].fields);
     $('.resultCount').innerHTML = getRowCount(performance.now(), filteredRows.length);
 }
 
@@ -488,34 +527,44 @@ function execSql(sql, isOwnSql) {
                 $('.loadingOwn').hide();
                 $('#sqlError').empty();
 
-                rows.all[dbName] = rowsFromDb;
-                var h3 = `<h3>${dbName}</h3>`;
-                var tbl = createTable(rows.all[dbName], dbName, false);
-                var rowCount = getRowCount(t1ms, rows.all[dbName].length);
-                var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}${rowCount}</div>`;
-                divTableContentInnerHTML += wrapperForH3AndTbl;
-
-                if (rows.all[dbName].length > 0) {
-                    // Get Database columns (e.g. col1, col2) as array
-                    rows.fields = Object.keys(rows.all[dbName][0]);
-                }
+                storeTableColumnNames(rowsFromDb);
+                rows.all[dbName] = enrichWithIndex(rowsFromDb);
 
                 if (dbName === lastDb) {
-                    $('#divTableContents').innerHTML = divTableContentInnerHTML;
+                    var cols = tables[dbName].find(f => f.TABLE_NAME == selectedTable).cols;
+                    compareTables(rows.all[dbs[0]], rows.all[dbs[1]], dbs, selectedTable, cols);
+                    showComparisonButtonsIfNeeded(rows.areDifferent);
 
-                    compareTables(rows.all[dbs[0]], rows.all[dbs[1]], dbs);
-                    if (rows.areDifferent)
-                        $('#comparisonButtons').show();
-                    else
-                        $('#comparisonButtons').hide();
+                    dbs.forEach(dbName => {
+                        var h3 = `<h3>${dbName}</h3>`;
+                        var tbl = createTable(rows.all[dbName], dbName, false, rows.all[dbName].fields);
+                        var rowCount = getRowCount(t1ms, rows.all[dbName].length);
+                        var wrapperForH3AndTbl = `<div class="tblWrapper">${h3}${tbl}${rowCount}</div>`;
+                        divTableContentInnerHTML += wrapperForH3AndTbl;
+                    });
+                    $('#divTableContents').innerHTML = divTableContentInnerHTML;
 
                     alignTablesHorizontally('#divTableContents .tblWrapper', dbs.length);
                     window.scrollTo(0, $('.generatedSql').offsetTop);
-                    addMouseEnterEventsInAllRows($(`#divTableContents #tbl${dbs[0]}`));
+                    addMouseEnterToHighlightCounterpart($(`#divTableContents #tbl${dbs[0]}`), $(`#divTableContents #tbl${dbs[1]}`));
                 }
             });
         }).catch(Err.handleFetch);
     });
+}
+
+function showComparisonButtonsIfNeeded(rowsAreDifferent) {
+    if (rowsAreDifferent)
+        $('#comparisonButtons').show();
+    else
+        $('#comparisonButtons').hide();
+}
+
+function storeTableColumnNames(rowsForDb) {
+    if (rowsForDb.length > 0) {
+        // Get Database columns (e.g. col1, col2) as array
+        rowsForDb.fields = Object.keys(rowsForDb[0]);
+    }
 }
 
 /**
@@ -542,45 +591,45 @@ function enhanceSelectStatement(sql, isOwnSql) {
     return sql;
 }
 
-function addMouseEnterEventsInAllRows(tbl) {
+function addMouseEnterToHighlightCounterpart(tbl, otherTbl) {
     var trs = Array.from(tbl.querySelectorAll('tbody tr'));
-    var idxOfIdColumn = rows.fields.indexOf(rows.fieldId);
+    var pks = getPrimaryKeysOfTable(selectedTable);
 
-    if (idxOfIdColumn > -1) {
+    if (pks.length > 0) {
         trs.forEach(tr => {
             tr.addEventListener('mouseenter', (e) => {
-                var t = e.target;
-                var rowId = t.children[idxOfIdColumn].innerText;
+                var rowIdx = tr.dataset.idx;
+                var dbname = tr.closest('table').dataset.dbname;
+                var rowIdxEqual = rows.all[dbname][rowIdx].hasEqual;
+                var rowIdxDiff = rows.all[dbname][rowIdx].hasDiff;
+                otherTbl.querySelectorAll('tr').forEach(trX => {
+                    trX.removeClass('hover');
+                    trX.removeClass('hoverDiff');
+                });
+                if (rowIdxEqual == undefined && rowIdxDiff == undefined)
+                    return;
 
-                var dbs = getCheckedDbs();
-                var tbl1Trs = $all(`#divTableContents #tbl${dbs[1]} tbody tr`);
-                tbl1Trs.forEach(trX => trX.removeClass('hover'));
-                for (var i = 0; i < tbl1Trs.length; i++) {
-                    var tdWithId = tbl1Trs[i].children[idxOfIdColumn];
-                    if (tdWithId.innerText === rowId) {
-                        tbl1Trs[i].addClass('hover');
-                        break;
-                    }
-                }
+                var hasEqual = (rowIdxEqual != undefined);
+                var idx = hasEqual ? rowIdxEqual : rowIdxDiff;
+                var cssHover = hasEqual ? 'hover' : 'hoverDiff';
+                var trToHighlight = otherTbl.find(`tr[data-idx="${idx}"]`);
+                trToHighlight.addClass(cssHover);
             });
         });
     }
 }
 
-function createTable(rows, dbName, isOverview) {
-    var tbl = `<table id="tbl${dbName}" class="tblSql">\n  <thead>%h</thead>\n  <tbody>%b</tbody>\n</table>`;
+function createTable(rows, dbName, isOverview, visibleColumns) {
+    var tbl = `<table id="tbl${dbName}" data-dbname="${dbName}" class="tblSql">\n  <thead>%h</thead>\n  <tbody>%b</tbody>\n</table>`;
     var th = '<th>%s <input type="text" class="filter vHidden" onchange="filterChanged(this, \'%c\')"> </th>';
-    var td = isOverview ? '<td data-tbl="%t" data-cnt="%c">%s</td>' : '<td>%s</td>';
 
     // create table header
-    var headers = rows && rows.length > 0 ? Object.keys(rows[0]) : ['empty'];
     var tr = '',
         i = 0;
     var thead = '',
         tbody = '';
-    headers.forEach(h => {
-        if (h !== 'hasEqual' && h !== 'hasDiff' && h !== 'NUM_ROWS') // TODO -> ugly 
-            tr += th.replace('%s', h + addSortingInTableHeader(h, i++)).replace('%c', h);
+    visibleColumns.forEach(h => {
+        tr += th.replace('%s', h + addSortingInTableHeader(h, i++)).replace('%c', h);
     });
     thead = `<tr>${tr}</tr>`;
 
@@ -588,17 +637,15 @@ function createTable(rows, dbName, isOverview) {
     rows.forEach(r => {
         tr = '';
         if (isOverview) {
-            tr += td.replace('%s', r.TABLES).replace('%t', r.TABLES).replace("%c", r.NUM_ROWS);
+            tr += `<td data-tbl="${r.TABLE_NAME}" data-cnt="${r.NUM_ROWS}">${r.TABLE_NAME}</td>`;
         } else {
-            headers.forEach(h => {
-                if (h !== 'hasEqual' && h !== 'hasDiff') { // TODO -> ugly 
-                    if (!r[h]) // undefined, because db column is empty
-                        r[h] = '';
-                    tr += td.replace('%s', r[h]);
-                }
+            visibleColumns.forEach(h => {
+                if (!r[h]) // undefined, because db column is empty
+                    r[h] = '';
+                tr += `<td>${r[h]}</td>`;
             });
         }
-        tbody += `<tr>${tr}</tr>`;
+        tbody += `<tr data-idx=${r.idx}>${tr}</tr>`;
     });
     return tbl.replace('%h', thead).replace('%b', tbody);
 }
