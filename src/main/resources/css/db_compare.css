@@ -185,6 +185,13 @@ span.short {
     text-align: center;
     color: forestgreen;
     font-size: large;
+    margin: 20px;
+}
+
+#comparisonResult span {
+    border: 2px solid black;
+    border-radius: 4px;
+    padding: 5px;
 }
 
 .tblSql {
@@ -229,6 +236,10 @@ span.short {
 .tblSql th span {
     float: right;
     cursor: pointer;
+}
+
+#sqlResult .tblSql td .diff {
+    color: red;
 }
 
 .cnt {
